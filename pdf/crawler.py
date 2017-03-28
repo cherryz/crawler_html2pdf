@@ -26,6 +26,19 @@ html_template = """
 
 """
 
+html_template1 = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" media="screen" href="https://git-scm.com/assets/git-scm-c4d5b16a274fa90278203ca038fe3ad8.css">
+</head>
+<body>
+{content}
+</body>
+</html>
+"""
+
 
 class Crawler(object):
     """
@@ -48,8 +61,10 @@ class Crawler(object):
         pass
         :return:
         """
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/56.0.2924.87 Safari/537.36'}
         print(url)
-        response = requests.get(url)
+        response = requests.get(url, headers=headers)
         return response
 
     def parse_menu(self, response):
@@ -85,6 +100,7 @@ class Crawler(object):
                 ('cookie-name2', 'cookie-value2'),
             ],
             'outline-depth': 10,
+            'dpi': 350
         }
         htmls = []
         for index, url in enumerate(self.parse_menu(self.crawl(self.start_url))):
@@ -157,7 +173,49 @@ class LiaoxuefengPythonCrawler(Crawler):
             logging.error("解析错误", exc_info=True)
 
 
+class GitProCrawler(Crawler):
+
+    def parse_menu(self, response):
+        soup = BeautifulSoup(response.text, 'lxml')
+        chapter_lis = soup.find_all('li', {'class': 'chapter'})
+        for chapter_li in chapter_lis:
+            for li in chapter_li.find_all('li'):
+                url = li.a['href']
+                if not url.startswith("http"):
+                    url = "".join([self.domain, url])  # 补全为全路径
+                yield url
+
+    def parse_body(self, response):
+        try:
+            soup = BeautifulSoup(response.text, 'lxml')
+            main_div = soup.find('div', {'id': 'main'})
+
+            def has_href(tag):
+                return tag.has_attr('href')
+
+            def has_src(tag):
+                return tag.has_attr('src')
+
+            has_href_tags = main_div.find_all(has_href)
+            has_src_tags = main_div.find_all(has_src)
+
+            if has_href_tags:
+                for tag in has_href_tags:
+                    if not tag['href'].startswith('http'):
+                        tag['href'] = ''.join([self.domain, tag['href']])
+
+            if has_src_tags:
+                for tag in has_src_tags:
+                    if not tag['src'].startswith('http'):
+                        tag['src'] = ''.join([self.domain, tag['src']])
+            main_div.find('div', {'id': 'nav'}).extract()
+            html = html_template1.format(content=main_div)
+            return html.encode('utf-8')
+        except Exception as e:
+            logging.error("解析错误", exc_info=True)
+
+
 if __name__ == '__main__':
-    start_url = "http://www.liaoxuefeng.com/wiki/0013739516305929606dd18361248578c67b8067c8c017b000"
-    crawler = LiaoxuefengPythonCrawler("廖雪峰Git", start_url)
+    start_url = "https://git-scm.com/book/zh/v2"
+    crawler = GitProCrawler("GitPro", start_url)
     crawler.run()
